@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width">
+
+  <title>Speech to text</title>
+</head>
+
+<body>
+  <script>
+    var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition
+    var SpeechGrammarList = SpeechGrammarList || webkitSpeechGrammarList
+    var SpeechRecognitionEvent = SpeechRecognitionEvent || webkitSpeechRecognitionEvent
+
+    var recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognizer_enable = false;
+
+    function start(websocketServerLocation){
+        ws = new WebSocket(websocketServerLocation);
+        console.log("~ Websocket connected !");
+
+        ws.onmessage = function(msg) {
+              msg = msg.data;
+              if (msg == 'stop') {
+                console.log("~ Stopping recognizer ...")
+                if (recognizer_enable) recognition.stop();
+                recognizer_enable = false;
+              } else if (msg == 'start') {
+                console.log("~ Starting recognizer ...")
+                if (!recognizer_enable) recognition.start();
+                recognizer_enable = true;
+              }
+        };
+        ws.onclose = function(){
+            console.log("~ Reconnecting ...");
+            setTimeout(function(){
+                start(websocketServerLocation)
+            }, 5000);
+        };
+    }
+
+    function recognizer() {
+        try {
+            if (recognizer_enable) recognition.start();
+        } catch (e) {
+        }
+
+        setTimeout(function() {
+            recognizer();
+        }, 1000);
+    }
+
+    recognizer();
+
+    start("ws://127.0.0.1:8081/ws");
+
+    recognition.onresult = function (event) {
+      var last = event.results.length - 1;
+      var result = event.results[last][0].transcript;
+
+      var conf = event.results[last][0].confidence;
+
+      console.log("~ Voice : ", result, conf);
+
+      ws.send(result);
+    }
+
+    recognition.onerror = function (event) {
+      console.log('~ Error occurred in recognition: ' + event.error);
+      recognizer_enable = false;
+    }
+
+    recognition.onend = function(event) {
+      console.log('~ End of recognition')
+      recognizer_enable = false;
+    }
+  </script>
+</body>
+
+</html>
